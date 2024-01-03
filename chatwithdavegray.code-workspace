@@ -1,0 +1,21 @@
+{
+  "folders": [
+	{
+		"name": "chatwithdavegray",
+		"path": "."
+	},
+	{
+		"path": "D:/expo-chat-app-backend/controllers"
+	},
+	{
+		"path": "D:/expo-chat-app-backend/models"
+	},
+	{
+		"path": "D:/expo-chat-app-backend/routes"
+	},
+	{
+		"path": "D:/expo-chat-app-backend/config"
+	}
+],
+  "settings": {}
+}
