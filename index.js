@@ -7,6 +7,12 @@ const cors = require("cors");
 const Room = require("./models/room.model");
 const User = require("./models/user.model");
 const userRoute = require("./routes/user.routes");
+const roomIdRoute = require("./routes/roomIds.routes");
+const ChatLists = require("./models/chatlist.model");
+
+const RoomList = require("./models/roomlist.model");
+const RoomIds = require("./models/roomId.model");
+const ActiveUsers = require("./models/activeusers.model");
 
 const { connectDb } = require("./config/database");
 
@@ -21,6 +27,7 @@ app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 
 app.use("/api/auth", userRoute);
+app.use("/api/room", roomIdRoute);
 app.use(express.static(__dirname + "/public"));
 
 const expressServer = app.listen(PORT, () => {
@@ -49,19 +56,26 @@ io.on("connection", (socket) => {
   console.log(`User ${socket.id} connected`);
 
   socket.on("enterRoom", async (data) => {
-    const { name, room } = data;
+    const { name, room, id } = data;
 
-    const prevRoom = await getUser(socket.id)?.room;
-
-    if (prevRoom) {
-      socket.leave(prevRoom);
+    let prevRoom = await getUser(id);
+    console.log("previouse room", prevRoom);
+    if (prevRoom.room) {
+      socket.leave(prevRoom.room);
       io.to(prevRoom).emit(
         "message",
         buildMsg(ADMIN, `${name} has left the room`)
       );
     }
     console.log("before active user", name, room);
-    const user = await activateUser(socket.id, name, room);
+    const user = await activateUser(id, name, room);
+    console.log("activate", user);
+    // try {
+    //   const roomlistadded = await addRoomNameToList(name, room);
+    //   console.log(roomlistadded);
+    // } catch (error) {
+    //   console.log(error);
+    // }
 
     // if (prevRoom) {
     //   io.to(prevRoom).emit("userList", {
@@ -114,13 +128,27 @@ io.on("connection", (socket) => {
     console.log(data);
 
     console.log("im trogger");
-    const { name, text } = data;
+    const { name, text, id, room, reciever } = data;
+
+    console.log(name, text, id, room, reciever);
     try {
-      const room = await getUser(socket.id);
+      const room = await getUser(id);
+      console.log(room);
       const roomValue = room != null ? room.room : undefined;
       console.log("the room value is", room != null ? room.room : undefined);
 
-      if (roomValue) {
+      if (roomValue != room) {
+        socket.emit("getRoomList", "i came because you are not in the room");
+        socket.emit("addRoomList", {
+          name: name,
+          text: text,
+          id: id,
+          room: room,
+          reciever: reciever,
+        });
+      }
+
+      if (roomValue == room) {
         io.to(roomValue).emit("message", buildMsg(name, text));
       } else {
         console.log("Room value is undefined");
@@ -130,10 +158,32 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("activity", async (name) => {
+  socket.on("getRoomList", async (name) => {
+    try {
+      const RoomList = await getRoomList(name);
+      console.log(RoomList);
+      socket.emit("getRoomList", RoomList);
+    } catch (error) {
+      console.log(error);
+    }
+  });
+
+  socket.on("addRoomList", async (data) => {
+    try {
+      console.log(data);
+      //const listAdded = await addRoomList(data)
+    } catch (error) {
+      console.log(error);
+    }
+  });
+
+  socket.on("activity", async (data) => {
     // socket.broadcast.emit("activity", name);
     try {
-      const room = await getUser(socket.id);
+      const { name, id } = data;
+      console.log(name, id, "my value while typing!!");
+      console.log("my value ", name, id);
+      const room = await getUser(id);
 
       const roomValue = room != null ? room.room : undefined;
       console.log("the room value is", room != null ? room.room : undefined);
@@ -252,16 +302,120 @@ function buildMsg(name, text) {
   };
 }
 
+//Room functions
+async function addRoomList(data) {
+  console.log(data);
+}
+
+//Room functions
+
+async function addRoomNameToList(name, room) {
+  try {
+    // Check if a record with the given name exists
+    console.log(name, room);
+    const existingRoomList = await RoomList.findOne({ where: { name } });
+    console.log(existingRoomList);
+    if (existingRoomList) {
+      // If the record exists, update the roomname array by adding the new room value
+      const updatedRoomList = await existingRoomList.update({
+        room: [...existingRoomList.room, room],
+      });
+
+      console.log(updatedRoomList);
+    } else {
+      // If the record doesn't exist, create a new one with the given name and room
+      console.log("the value is null so im here", name, room);
+      // const newRoomList = await RoomList.create({ name, room: [room] });
+      // console.log(newRoomList);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+//add avtive users
+
+async function addUsernameToRooms(name, room) {
+  try {
+    // Check if a record with the given name exists
+    const existingRoomList = await ActiveUsers.findOne({ where: { room } });
+
+    if (existingRoomList) {
+      // If the record exists, update the roomname array by adding the new room value
+      const updatedRoomList = await ActiveUsers.update({
+        activeUsers: [...existingRoomList.activeUsers, name],
+      });
+
+      console.log(updatedRoomList);
+    } else {
+      // If the record doesn't exist, create a new one with the given name and room
+      const newRoomList = await ActiveUsers.create({
+        room,
+        activeUsers: [name],
+      });
+      console.log(newRoomList);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+//getRoomlist
+async function getRoomList(name) {
+  try {
+    const RoomLists = await RoomList.findAll({ where: { name } });
+    console.log(RoomLists);
+    return RoomLists;
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+//getActiveusers
+
+async function getUserList(room) {
+  try {
+    const activeUsers = await ActiveUsers.findAll({ where: { room } });
+    console.log(activeUsers);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
 //user Functions
 
 async function activateUser(id, name, room) {
-  const user = { id, name, room };
-  console.log(id, name, room);
+  // const user = { id, name, room };
+  // console.log(id, name, room);
+  // try {
+  //   const roomCreated = await Room.create({ id, name, room });
+  //   return roomCreated.dataValues;
+  // } catch (error) {
+  //   console.log(error);
+  // }
+
   try {
-    const roomCreated = await Room.create({ id, name, room });
-    return roomCreated.dataValues;
+    const [numberOfAffectedRows, updatedRows] = await User.update(
+      { room: room },
+      { where: { _id: id }, returning: true }
+    );
+
+    const response = await User.update({ room: room }, { where: { _id: id } });
+
+    console.log("respose from updatui", response);
+
+    if (numberOfAffectedRows > 0) {
+      console.log(`Room updated successfully for user with ID ${id}`);
+      const updatedUser = updatedRows[0].dataValues;
+      console.log(updatedUser);
+      return updatedUser; // Returns the updated user data
+    } else {
+      console.log(`User with ID ${id} not found`);
+      return null; // Indicates that the user was not found
+    }
   } catch (error) {
-    console.log(error);
+    console.error(error);
+    // Handle the error appropriately
   }
 }
 
@@ -284,9 +438,9 @@ async function userLeavesApp(id) {
 async function getUser(id) {
   console.log("userID", id);
   try {
-    const user = await Room.findOne({
+    const user = await User.findOne({
       where: {
-        id: id,
+        _id: id,
       },
     });
     console.log("from the getuser", user != null ? user.dataValues : null);

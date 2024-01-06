@@ -33,6 +33,7 @@ exports.loginUser = async (req, res) => {
     });
 
     const isMatched = await user.comparePassword(req.body.password);
+
     if (!isMatched)
       return res.status(400).json({ message: "Incorrect password or email" });
 
@@ -40,6 +41,7 @@ exports.loginUser = async (req, res) => {
 
     return res.status(200).json({
       message: "Login successfull",
+      data: user,
     });
   } catch (error) {
     console.log(error.message);
