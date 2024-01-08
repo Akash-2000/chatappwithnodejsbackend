@@ -5,17 +5,26 @@ const bcrypt = require("bcryptjs");
 const Roomlist = sequelize.define(
   "roomlist",
   {
-    name: {
+    chatID: {
       type: DataTypes.STRING,
       allowNull: false,
     },
-    userid: {
+    senderid: {
       type: DataTypes.UUID,
       allowNull: false,
     },
-    rooms: {
-      type: DataTypes.ARRAY(DataTypes.STRING),
+    recieverID: {
+      type: DataTypes.UUID,
       allowNull: false,
+    },
+    Roomname: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
     },
   },
   {

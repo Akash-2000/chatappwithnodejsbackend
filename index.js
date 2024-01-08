@@ -1,6 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const { Server } = require("socket.io");
+const { Sequelize } = require("sequelize");
 const dotenv = require("dotenv").config();
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
@@ -9,6 +10,9 @@ const User = require("./models/user.model");
 const userRoute = require("./routes/user.routes");
 const roomIdRoute = require("./routes/roomIds.routes");
 const ChatLists = require("./models/chatlist.model");
+const Roomlist = require("./models/roomlist.model");
+
+const Messages = require("./models/message.models");
 
 const RoomList = require("./models/roomlist.model");
 const RoomIds = require("./models/roomId.model");
@@ -132,24 +136,72 @@ io.on("connection", (socket) => {
 
     console.log(name, text, id, room, reciever);
     try {
-      const room = await getUser(id);
-      console.log(room);
-      const roomValue = room != null ? room.room : undefined;
-      console.log("the room value is", room != null ? room.room : undefined);
+      const rooms = await getUser(id);
+      const receiverroom = await getUser(reciever);
+      console.log(rooms);
+      console.log(receiverroom.room);
 
-      if (roomValue != room) {
-        socket.emit("getRoomList", "i came because you are not in the room");
-        socket.emit("addRoomList", {
-          name: name,
-          text: text,
-          id: id,
-          room: room,
-          reciever: reciever,
-        });
-      }
+      const sendeRoomname = rooms.name;
+      const recieverRoomname = receiverroom.name;
+      const roomValue = rooms != null ? rooms.room : undefined;
+      console.log("the room value is of the user", roomValue);
+      console.log("the room value he is in", room);
 
-      if (roomValue == room) {
+      if (receiverroom.room == room) {
         io.to(roomValue).emit("message", buildMsg(name, text));
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: id,
+          recieverID: reciever,
+          Roomname: sendeRoomname,
+        });
+
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: reciever,
+          recieverID: id,
+          Roomname: recieverRoomname,
+        });
+
+        await addMessageToDB({
+          chatID: room,
+          userId: id,
+          Messages: [
+            {
+              message: text,
+              sender: id,
+              reciever: reciever,
+              read: recieverRoomname == room ? true : false,
+            },
+          ],
+        });
+      } else if (receiverroom.room != room) {
+        socket.emit("getRoomList", "i came because you are not in the room");
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: id,
+          recieverID: reciever,
+          Roomname: sendeRoomname,
+        });
+
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: reciever,
+          recieverID: id,
+          Roomname: recieverRoomname,
+        });
+        await addMessageToDB({
+          chatID: room,
+          userId: id,
+          messages: [
+            {
+              message: text,
+              sender: id,
+              reciever: reciever,
+              read: roomValue == room ? true : false,
+            },
+          ],
+        });
       } else {
         console.log("Room value is undefined");
       }
@@ -163,15 +215,6 @@ io.on("connection", (socket) => {
       const RoomList = await getRoomList(name);
       console.log(RoomList);
       socket.emit("getRoomList", RoomList);
-    } catch (error) {
-      console.log(error);
-    }
-  });
-
-  socket.on("addRoomList", async (data) => {
-    try {
-      console.log(data);
-      //const listAdded = await addRoomList(data)
     } catch (error) {
       console.log(error);
     }
@@ -300,6 +343,110 @@ function buildMsg(name, text) {
       second: "numeric",
     }).format(new Date()),
   };
+}
+
+//while sending the message the message
+/**
+ * The message needs to be addded to the room list of the 
+    of the both user and reciever and room name should be dynamic
+ 
+ * The message needs to be added to the message list for the both of them
+    with their id and chat id with the object
+ */
+
+async function addDataToRoomlist(data) {
+  //need chatid,uuid,recieverid,roomname to add to the table
+  /**
+   * Roomname is determined by the user id given
+   */
+  console.log(data);
+
+  const isDataAlreadyPresent = await Roomlist.findAll({
+    where: {
+      chatID: data.chatID,
+    },
+  });
+
+  console.log(isDataAlreadyPresent.length, "my datas hello");
+
+  if (isDataAlreadyPresent.length < 2) {
+    try {
+      const response = await Roomlist.create(data);
+      console.log(response);
+      return response;
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  if (isDataAlreadyPresent.length == 2) {
+    try {
+      await Roomlist.update(
+        { updatedAt: new Date() },
+        { where: { chatID: data.chatID } }
+      );
+
+      console.log("Timestamp updated successfully.");
+    } catch (error) {
+      console.error("Error updating timestamp:", error);
+    }
+  }
+}
+
+//Send Messagae to the user and reciever
+
+/**
+ * when user hit the send button it the message should be stored
+   in the database chatId userId Message 
+ */
+
+async function addMessageToDB(data) {
+  console.log("message to ", data);
+  const isMessageRowCreated = await Messages.findAll({
+    where: {
+      chatID: data.chatID,
+      userId: data.userId,
+    },
+  });
+  console.log(data.messages);
+  console.log(isMessageRowCreated.length);
+  if (isMessageRowCreated.length < 1) {
+    try {
+      const response = await Messages.create({
+        chatID: data.chatID,
+        userId: data.userId,
+        messages: data.messages,
+      });
+      console.log(response);
+    } catch (error) {
+      console.log(error);
+    }
+  } else if (isMessageRowCreated.length == 1) {
+    try {
+      const result = await Messages.update(
+        {
+          messages: Sequelize.fn(
+            "array_append",
+            Sequelize.literal(
+              'COALESCE("Messages"."messages", \'{}\'::jsonb[])'
+            ),
+            Sequelize.literal(`'${JSON.stringify(data.Messages[0])}'::jsonb`)
+          ),
+        },
+        {
+          where: {
+            chatID: data.chatID,
+            userId: data.userId,
+          },
+          returning: true,
+          plain: true,
+        }
+      );
+
+      console.log("Message added to the array:", result[1]);
+    } catch (error) {
+      console.error("Error adding message to the array:", error);
+    }
+  }
 }
 
 //Room functions
@@ -449,11 +596,3 @@ async function getUser(id) {
     console.log(error);
   }
 }
-
-// function getUsersInRoom(room) {
-//   return usersState.users.filter((user) => user.room === room);
-// }
-
-// function getAllActiveRooms() {
-//   return Array.from(new Set(usersState.users.map((user) => user.room)));
-// }
