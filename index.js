@@ -175,8 +175,11 @@ io.on("connection", (socket) => {
             },
           ],
         });
+        socket.emit("getRoomList", {
+          senderId: reciever,
+        });
       } else if (receiverroom.room != room) {
-        socket.emit("getRoomList", "i came because you are not in the room");
+        io.to(roomValue).emit("message", buildMsg(name, text));
         await addDataToRoomlist({
           chatID: room,
           senderid: id,
@@ -193,14 +196,20 @@ io.on("connection", (socket) => {
         await addMessageToDB({
           chatID: room,
           userId: id,
-          messages: [
+          Messages: [
             {
               message: text,
               sender: id,
               reciever: reciever,
-              read: roomValue == room ? true : false,
+              read: false,
             },
           ],
+        });
+
+        console.log("message send to the reciever");
+        console.log(reciever);
+        socket.emit("getRoomList", {
+          senderId: reciever,
         });
       } else {
         console.log("Room value is undefined");
@@ -212,9 +221,10 @@ io.on("connection", (socket) => {
 
   socket.on("getRoomList", async (name) => {
     try {
+      console.log("getRoom list is called");
       const RoomList = await getRoomList(name);
       console.log(RoomList);
-      socket.emit("getRoomList", RoomList);
+      socket.broadcast.to(name).emit("getRoomList", RoomList);
     } catch (error) {
       console.log(error);
     }
@@ -236,6 +246,15 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.log("fetching data issue");
     }
+  });
+
+  socket.on("roolistEvent", async () => {
+    console.log("you are not in the room!!!");
+  });
+
+  socket.on("exitRoom", async (data) => {
+    console.log(data.id);
+    const room = await removeUserRoomname(data);
   });
 
   // Upon connection - only to user
@@ -407,14 +426,14 @@ async function addMessageToDB(data) {
       userId: data.userId,
     },
   });
-  console.log(data.messages);
+  console.log(data);
   console.log(isMessageRowCreated.length);
   if (isMessageRowCreated.length < 1) {
     try {
       const response = await Messages.create({
         chatID: data.chatID,
         userId: data.userId,
-        messages: data.messages,
+        Messages: data.messages,
       });
       console.log(response);
     } catch (error) {
@@ -422,14 +441,15 @@ async function addMessageToDB(data) {
     }
   } else if (isMessageRowCreated.length == 1) {
     try {
+      console.log(data.Messages);
       const result = await Messages.update(
         {
           messages: Sequelize.fn(
             "array_append",
             Sequelize.literal(
-              'COALESCE("Messages"."messages", \'{}\'::jsonb[])'
+              'COALESCE("Messages"."Messages", \'{}\'::jsonb[])'
             ),
-            Sequelize.literal(`'${JSON.stringify(data.Messages[0])}'::jsonb`)
+            Sequelize.literal(`'${JSON.stringify(data.Messages)}'::jsonb`)
           ),
         },
         {
@@ -442,7 +462,7 @@ async function addMessageToDB(data) {
         }
       );
 
-      console.log("Message added to the array:", result[1]);
+      console.log("Message added to the array:", result[0]);
     } catch (error) {
       console.error("Error adding message to the array:", error);
     }
@@ -480,6 +500,22 @@ async function addRoomNameToList(name, room) {
   }
 }
 
+//Remove the user room from the userID
+
+async function removeUserRoomname(data) {
+  console.log(data);
+  await User.update(
+    { room: null }, // Set the column value to null or any other desired value
+    { where: { _id: data.id } } // Replace 'id' with the primary key of your table
+  )
+    .then((result) => {
+      console.log(`${result[0]} row(s) updated.`);
+    })
+    .catch((error) => {
+      console.error("Error updating row:", error);
+    });
+}
+
 //add avtive users
 
 async function addUsernameToRooms(name, room) {
@@ -509,8 +545,13 @@ async function addUsernameToRooms(name, room) {
 
 //getRoomlist
 async function getRoomList(name) {
+  console.log(name);
   try {
-    const RoomLists = await RoomList.findAll({ where: { name } });
+    const RoomLists = await RoomList.findAll({
+      where: {
+        senderid: name.senderId,
+      },
+    });
     console.log(RoomLists);
     return RoomLists;
   } catch (error) {

@@ -18,7 +18,7 @@ const Messages = sequelize.define(
     //   allowNull: true, // Set to false if you want the array to be required
     //   defaultValue: [],
     // },
-    messages: {
+    Messages: {
       type: DataTypes.ARRAY(DataTypes.JSONB),
       defaultValue: [],
     },
