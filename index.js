@@ -52,7 +52,7 @@ const io = new Server(expressServer, {
     origin:
       process.env.NODE_ENV === "production"
         ? false
-        : ["http://192.168.1.18:8081"],
+        : ["http://192.168.1.26:8081"],
   },
 });
 
@@ -122,8 +122,8 @@ io.on("connection", (socket) => {
         "message",
         buildMsg(ADMIN, `${user.name} has left the room`)
       );
-
-      socket.disconnect();
+      socket.leave();
+      // socket.disconnect();
       console.log(`User ${socket.id} disconnected`);
     }
   });
@@ -175,9 +175,14 @@ io.on("connection", (socket) => {
             },
           ],
         });
-        socket.emit("getRoomList", {
-          senderId: reciever,
-        });
+        console.log("the room value he is in the get room list", room);
+        // socket.emit("getRoomList", {
+        //   senderId: reciever,
+        //   room: room,
+        // });
+        // socket.emit("getRoomList", {
+        //   senderId: reciever,
+        // });
       } else if (receiverroom.room != room) {
         io.to(roomValue).emit("message", buildMsg(name, text));
         await addDataToRoomlist({
@@ -207,10 +212,11 @@ io.on("connection", (socket) => {
         });
 
         console.log("message send to the reciever");
-        console.log(reciever);
-        socket.emit("getRoomList", {
-          senderId: reciever,
-        });
+        console.log(reciever, room);
+        // socket.emit("getRoomList", {
+        //   senderId: reciever,
+        //   room: room,
+        // });
       } else {
         console.log("Room value is undefined");
       }
@@ -219,12 +225,30 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("getRoomList", async (name) => {
+  socket.on("getRoomList", async (data) => {
+    console.log("my name is ", data);
+    const { senderId, room } = data;
+    console.log("hello im hte rommName", room);
+    console.log("hello im hte rommName", data.room);
     try {
       console.log("getRoom list is called");
-      const RoomList = await getRoomList(name);
-      console.log(RoomList);
-      socket.broadcast.to(name).emit("getRoomList", RoomList);
+
+      const connectedSocketsMap = io.of("/").sockets;
+
+      console.log(connectedSocketsMap);
+
+      const roomSocketIds = Array.from(
+        io.sockets.adapter.rooms.get(room) || []
+      );
+      console.log(io.sockets.adapter.rooms);
+      console.log("roomIDs", roomSocketIds);
+      console.log(connectedSocketsMap.keys());
+      const usersNotInRoom = Array.from(connectedSocketsMap.keys()).filter(
+        (socketId) => !roomSocketIds.includes(socketId)
+      );
+      // const RoomList = await getRoomList(name);
+      console.log(usersNotInRoom);
+      // io.to(name).emit("getRoomList", RoomList);
     } catch (error) {
       console.log(error);
     }
@@ -544,20 +568,20 @@ async function addUsernameToRooms(name, room) {
 }
 
 //getRoomlist
-async function getRoomList(name) {
-  console.log(name);
-  try {
-    const RoomLists = await RoomList.findAll({
-      where: {
-        senderid: name.senderId,
-      },
-    });
-    console.log(RoomLists);
-    return RoomLists;
-  } catch (error) {
-    console.log(error);
-  }
-}
+// async function getRoomList(name) {
+//   console.log(name);
+//   try {
+//     const RoomLists = await RoomList.findAll({
+//       where: {
+//         senderid: name.senderId,
+//       },
+//     });
+//     console.log(RoomLists);
+//     return RoomLists;
+//   } catch (error) {
+//     console.log(error);
+//   }
+// }
 
 //getActiveusers
 
@@ -605,6 +629,11 @@ async function activateUser(id, name, room) {
     console.error(error);
     // Handle the error appropriately
   }
+}
+
+async function getTheList(data) {
+  const { senderId, roomname } = data;
+  return data;
 }
 
 async function userLeavesApp(id) {
