@@ -27,6 +27,10 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    socketId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   },
   {
     timestamps: true,
@@ -44,6 +48,10 @@ User.prototype.comparePassword = async function (enterPassword) {
   return bcrypt.compareSync(enterPassword, this.password);
 };
 
+// sequelize.queryInterface.addColumn("Users", "socketId", {
+//   type: DataTypes.STRING,
+//   allowNull: true,
+// });
 sequelize
   .sync()
   .then(() => console.log("Table created"))

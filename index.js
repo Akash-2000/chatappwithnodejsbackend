@@ -8,6 +8,7 @@ const cors = require("cors");
 const Room = require("./models/room.model");
 const User = require("./models/user.model");
 const userRoute = require("./routes/user.routes");
+const MessageRouter = require("./routes/message.routes");
 const roomIdRoute = require("./routes/roomIds.routes");
 const ChatLists = require("./models/chatlist.model");
 const Roomlist = require("./models/roomlist.model");
@@ -32,6 +33,7 @@ app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x
 
 app.use("/api/auth", userRoute);
 app.use("/api/room", roomIdRoute);
+app.use("/api/msg", MessageRouter);
 app.use(express.static(__dirname + "/public"));
 
 const expressServer = app.listen(PORT, () => {
@@ -46,6 +48,8 @@ const usersState = {
     this.users = newUserArray;
   },
 };
+
+const userSocketMap = [];
 
 const io = new Server(expressServer, {
   cors: {
@@ -87,8 +91,10 @@ io.on("connection", (socket) => {
     //   });
     // }
     // join Room
-    console.log(user);
+    console.log("user of the user", user);
+
     socket.join(user.room);
+    userSocketMap[user._id] = { socket_id: socket.id, room: user.room };
 
     //To user who joined
 
@@ -247,7 +253,20 @@ io.on("connection", (socket) => {
         (socketId) => !roomSocketIds.includes(socketId)
       );
       // const RoomList = await getRoomList(name);
+      if (roomSocketIds.length <= 1) {
+        const data = {
+          id: roomSocketIds,
+        };
+        const userNotinRoom = await getSocketIdOfuserNotinRoom(data);
+        console.log(userNotinRoom, "it is the value who is not in the room");
+        io.to(userNotinRoom).emit("getRoomList", "Your message here");
+      }
+      console.log(userSocketMap);
       console.log(usersNotInRoom);
+      // roomSocketIds.forEach((socketId) => {
+      //   io.to(userNotinRoom).emit("getRoomList", "Your message here");
+      // });
+
       // io.to(name).emit("getRoomList", RoomList);
     } catch (error) {
       console.log(error);
@@ -276,11 +295,30 @@ io.on("connection", (socket) => {
     console.log("you are not in the room!!!");
   });
 
-  socket.on("exitRoom", async (data) => {
-    console.log(data.id);
-    const room = await removeUserRoomname(data);
+  socket.on("addSocketId", async (data) => {
+    console.log("enter room data", data);
+    const { id } = data;
+    const socket_id = socket.id;
+    try {
+      const body = {
+        id: id,
+        socketid: socket_id,
+      };
+      console.log(body);
+      const response = await addSocketId(body);
+      console.log(response);
+    } catch (error) {
+      console.log(error);
+    }
   });
 
+  socket.on("leaveRoom", (data) => {
+    console.log(data);
+    const { id, room } = data;
+    if (id) {
+      socket.leave(room);
+    }
+  });
   // Upon connection - only to user
   //   socket.emit("message", buildMsg(ADMIN, "Welcome to chat App!"));
 
@@ -396,6 +434,66 @@ function buildMsg(name, text) {
  * The message needs to be added to the message list for the both of them
     with their id and chat id with the object
  */
+
+async function getSocketIdOfuserNotinRoom(data) {
+  console.log("data from getSocketIdOfuserNotinRoom", data.id[0]);
+
+  /**
+   * find the user room using the socket id
+   * there  will be 2 users using the room
+   * need to send message only to the user who is not in the
+   * whose list is
+   */
+  const getRoomname = await User.findAll({
+    where: {
+      socketId: data.id[0],
+    },
+    returning: true,
+    plain: true,
+  });
+
+  console.log("userRoom from the based on the socket id", getRoomname);
+  if (getRoomname) {
+    // Access the "room" value
+    const roomValue = getRoomname.dataValues.room;
+    console.log("Room Value:", roomValue);
+    const getUsersofRoom = await RoomList.findAll({
+      where: {
+        chatID: roomValue,
+      },
+      returning: true,
+      plain: true,
+    });
+    console.log(
+      "getUsersofRoom from the based on the socket id",
+      getUsersofRoom.dataValues
+    );
+    const userinRoom = getRoomname.dataValues._id;
+    const { senderid, recieverID } = getUsersofRoom.dataValues;
+    console.log(userinRoom, senderid, recieverID);
+    if (userinRoom == senderid) {
+      const getSocketid = await User.findAll({
+        where: {
+          _id: recieverID,
+        },
+        returning: true,
+        plain: true,
+      });
+      return getSocketid.dataValues.socketId;
+    } else {
+      const getSocketid = await User.findAll({
+        where: {
+          _id: senderid,
+        },
+        returning: true,
+        plain: true,
+      });
+      return getSocketid.dataValues.socketId;
+    }
+  } else {
+    console.log("User not found");
+  }
+}
 
 async function addDataToRoomlist(data) {
   //need chatid,uuid,recieverid,roomname to add to the table
@@ -589,6 +687,36 @@ async function getUserList(room) {
   try {
     const activeUsers = await ActiveUsers.findAll({ where: { room } });
     console.log(activeUsers);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+//add sockets
+async function addSocketId(data) {
+  const { id, socketid } = data;
+  try {
+    const [numberOfAffectedRows, updatedRows] = await User.update(
+      { socketId: socketid },
+      { where: { _id: id }, returning: true }
+    );
+
+    const response = await User.update(
+      { socketId: socketid },
+      { where: { _id: id } }
+    );
+
+    console.log("respose from updatui", response);
+
+    if (numberOfAffectedRows > 0) {
+      console.log(`Room updated successfully for user with ID ${id}`);
+      const updatedUser = updatedRows[0].dataValues;
+      console.log(updatedUser);
+      return updatedUser; // Returns the updated user data
+    } else {
+      console.log(`User with ID ${id} not found`);
+      return null; // Indicates that the user was not found
+    }
   } catch (error) {
     console.log(error);
   }
