@@ -152,6 +152,7 @@ io.on("connection", (socket) => {
       const roomValue = rooms != null ? rooms.room : undefined;
       console.log("the room value is of the user", roomValue);
       console.log("the room value he is in", room);
+      console.log("the room of the reciever", receiverroom.room);
 
       if (receiverroom.room == room) {
         io.to(roomValue).emit("message", buildMsg(name, text));
@@ -160,6 +161,7 @@ io.on("connection", (socket) => {
           senderid: id,
           recieverID: reciever,
           Roomname: sendeRoomname,
+          latestmessage: text,
         });
 
         await addDataToRoomlist({
@@ -167,6 +169,7 @@ io.on("connection", (socket) => {
           senderid: reciever,
           recieverID: id,
           Roomname: recieverRoomname,
+          latestmessage: text,
         });
 
         await addMessageToDB({
@@ -177,11 +180,15 @@ io.on("connection", (socket) => {
               message: text,
               sender: id,
               reciever: reciever,
-              read: recieverRoomname == room ? true : false,
+              read: receiverroom.room == room ? true : false,
             },
           ],
         });
-        console.log("the room value he is in the get room list", room);
+        console.log(
+          "the room value he is in the get room list",
+          room,
+          recieverRoomname
+        );
         // socket.emit("getRoomList", {
         //   senderId: reciever,
         //   room: room,
@@ -196,6 +203,7 @@ io.on("connection", (socket) => {
           senderid: id,
           recieverID: reciever,
           Roomname: sendeRoomname,
+          latestmessage: text,
         });
 
         await addDataToRoomlist({
@@ -203,6 +211,7 @@ io.on("connection", (socket) => {
           senderid: reciever,
           recieverID: id,
           Roomname: recieverRoomname,
+          latestmessage: text,
         });
         await addMessageToDB({
           chatID: room,
@@ -312,9 +321,10 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("leaveRoom", (data) => {
+  socket.on("leaveRoom", async (data) => {
     console.log(data);
     const { id, room } = data;
+    await removeUserRoomname(data);
     if (id) {
       socket.leave(room);
     }
@@ -500,7 +510,7 @@ async function addDataToRoomlist(data) {
   /**
    * Roomname is determined by the user id given
    */
-  console.log(data);
+  console.log("adasdasasda", data);
 
   const isDataAlreadyPresent = await Roomlist.findAll({
     where: {
@@ -522,7 +532,10 @@ async function addDataToRoomlist(data) {
   if (isDataAlreadyPresent.length == 2) {
     try {
       await Roomlist.update(
-        { updatedAt: new Date() },
+        {
+          updatedAt: new Date(),
+          latestmessage: data.latestmessage,
+        },
         { where: { chatID: data.chatID } }
       );
 
@@ -549,7 +562,7 @@ async function addMessageToDB(data) {
     },
   });
   console.log(data);
-  console.log(isMessageRowCreated.length);
+  console.log("Message data length", isMessageRowCreated.length);
   if (isMessageRowCreated.length < 1) {
     try {
       const response = await Messages.create({
@@ -563,10 +576,10 @@ async function addMessageToDB(data) {
     }
   } else if (isMessageRowCreated.length == 1) {
     try {
-      console.log(data.Messages);
+      console.log("message data of the data", data.Messages);
       const result = await Messages.update(
         {
-          messages: Sequelize.fn(
+          Messages: Sequelize.fn(
             "array_append",
             Sequelize.literal(
               'COALESCE("Messages"."Messages", \'{}\'::jsonb[])'
@@ -584,7 +597,7 @@ async function addMessageToDB(data) {
         }
       );
 
-      console.log("Message added to the array:", result[0]);
+      console.log("Message added to the array:", result);
     } catch (error) {
       console.error("Error adding message to the array:", error);
     }
@@ -765,7 +778,7 @@ async function getTheList(data) {
 }
 
 async function userLeavesApp(id) {
-  const affectedRows = await Room.destroy({
+  const affectedRows = await User.update({
     where: {
       id: id,
     },

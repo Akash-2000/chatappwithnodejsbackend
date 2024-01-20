@@ -26,12 +26,20 @@ const Roomlist = sequelize.define(
       allowNull: false,
       defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
     },
+    latestmessage: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
+// sequelize.queryInterface.addColumn("roomlists", "latestmessage", {
+//   type: DataTypes.STRING,
+//   allowNull: true,
+// });
 sequelize
   .sync()
   .then(() => console.log(" roomlist Table created"))

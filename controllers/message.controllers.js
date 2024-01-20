@@ -1,18 +1,19 @@
-const Messages = require("../models/message.models");
+const Roomlist = require("../models/roomlist.model");
 const { Sequelize } = require("sequelize");
 
 exports.getMessages = async (req, res) => {
   try {
     const { id } = req.body;
-    const MessagesofTheuser = await Messages.findAll({
+    const MessagesofTheuser = await Roomlist.findAll({
       where: {
-        userId: id,
+        recieverID: id,
       },
       plain: true,
       returning: true,
     });
     res.status(200).json({ data: MessagesofTheuser });
   } catch (error) {
-    res.status(500).json({ message: error });
+    console.log(error);
+    res.status(500).json({ error });
   }
 };
