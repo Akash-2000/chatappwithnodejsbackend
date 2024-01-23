@@ -30,14 +30,18 @@ const Roomlist = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    unreadCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// sequelize.queryInterface.addColumn("roomlists", "latestmessage", {
-//   type: DataTypes.STRING,
+// sequelize.queryInterface.addColumn("roomlists", "unreadCount", {
+//   type: DataTypes.INTEGER,
 //   allowNull: true,
 // });
 sequelize

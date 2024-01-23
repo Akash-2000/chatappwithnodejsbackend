@@ -76,6 +76,7 @@ io.on("connection", (socket) => {
       );
     }
     console.log("before active user", name, room);
+    // revokeTheUnreadMessage(data);
     const user = await activateUser(id, name, room);
     console.log("activate", user);
     // try {
@@ -156,21 +157,6 @@ io.on("connection", (socket) => {
 
       if (receiverroom.room == room) {
         io.to(roomValue).emit("message", buildMsg(name, text));
-        await addDataToRoomlist({
-          chatID: room,
-          senderid: id,
-          recieverID: reciever,
-          Roomname: sendeRoomname,
-          latestmessage: text,
-        });
-
-        await addDataToRoomlist({
-          chatID: room,
-          senderid: reciever,
-          recieverID: id,
-          Roomname: recieverRoomname,
-          latestmessage: text,
-        });
 
         await addMessageToDB({
           chatID: room,
@@ -184,6 +170,25 @@ io.on("connection", (socket) => {
             },
           ],
         });
+
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: id,
+          recieverID: reciever,
+          Roomname: sendeRoomname,
+          latestmessage: text,
+          role: "sender",
+        });
+
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: reciever,
+          recieverID: id,
+          Roomname: recieverRoomname,
+          latestmessage: text,
+          role: "sender",
+        });
+
         console.log(
           "the room value he is in the get room list",
           room,
@@ -198,21 +203,6 @@ io.on("connection", (socket) => {
         // });
       } else if (receiverroom.room != room) {
         io.to(roomValue).emit("message", buildMsg(name, text));
-        await addDataToRoomlist({
-          chatID: room,
-          senderid: id,
-          recieverID: reciever,
-          Roomname: sendeRoomname,
-          latestmessage: text,
-        });
-
-        await addDataToRoomlist({
-          chatID: room,
-          senderid: reciever,
-          recieverID: id,
-          Roomname: recieverRoomname,
-          latestmessage: text,
-        });
         await addMessageToDB({
           chatID: room,
           userId: id,
@@ -224,6 +214,23 @@ io.on("connection", (socket) => {
               read: false,
             },
           ],
+        });
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: id,
+          recieverID: reciever,
+          Roomname: sendeRoomname,
+          latestmessage: text,
+          role: "sender",
+        });
+
+        await addDataToRoomlist({
+          chatID: room,
+          senderid: reciever,
+          recieverID: id,
+          Roomname: recieverRoomname,
+          latestmessage: text,
+          role: "reciver",
         });
 
         console.log("message send to the reciever");
@@ -518,7 +525,30 @@ async function addDataToRoomlist(data) {
     },
   });
 
-  console.log(isDataAlreadyPresent.length, "my datas hello");
+  const updattheReadCount = await Messages.findAll({
+    where: {
+      chatID: data.chatID,
+    },
+    plain: true,
+  });
+
+  console.log("im the updated account", updattheReadCount);
+  const updateCount = updattheReadCount.dataValues.Messages.flat().reduce(
+    (acc, curr) => {
+      if (curr.read == false) {
+        return acc + 1;
+      } else {
+        return acc;
+      }
+    },
+    0
+  );
+
+  console.log(updateCount);
+  data["unreadCount"] = data.role == "reciver" ? updateCount : 0;
+
+  const newdata = delete data.role;
+  console.log(newdata);
 
   if (isDataAlreadyPresent.length < 2) {
     try {
@@ -530,13 +560,15 @@ async function addDataToRoomlist(data) {
     }
   }
   if (isDataAlreadyPresent.length == 2) {
+    console.log(data);
     try {
       await Roomlist.update(
         {
+          unreadCount: data.unreadCount,
           updatedAt: new Date(),
           latestmessage: data.latestmessage,
         },
-        { where: { chatID: data.chatID } }
+        { where: { chatID: data.chatID, senderid: data.senderid } }
       );
 
       console.log("Timestamp updated successfully.");
@@ -558,7 +590,6 @@ async function addMessageToDB(data) {
   const isMessageRowCreated = await Messages.findAll({
     where: {
       chatID: data.chatID,
-      userId: data.userId,
     },
   });
   console.log(data);
@@ -567,7 +598,6 @@ async function addMessageToDB(data) {
     try {
       const response = await Messages.create({
         chatID: data.chatID,
-        userId: data.userId,
         Messages: data.messages,
       });
       console.log(response);
@@ -582,18 +612,15 @@ async function addMessageToDB(data) {
           Messages: Sequelize.fn(
             "array_append",
             Sequelize.literal(
-              'COALESCE("Messages"."Messages", \'{}\'::jsonb[])'
+              'COALESCE("Messages"."Messages", \'{}\'::json[])'
             ),
-            Sequelize.literal(`'${JSON.stringify(data.Messages)}'::jsonb`)
+            Sequelize.literal(`'${JSON.stringify(data.Messages)}'::json`)
           ),
         },
         {
           where: {
             chatID: data.chatID,
-            userId: data.userId,
           },
-          returning: true,
-          plain: true,
         }
       );
 
@@ -769,6 +796,33 @@ async function activateUser(id, name, room) {
   } catch (error) {
     console.error(error);
     // Handle the error appropriately
+  }
+}
+
+async function revokeTheUnreadMessage(data) {
+  //is anyReadMessage present for this chatID,and the user
+  const isanyUnreadMessage = await RoomList.findOne({
+    where: {
+      chatID: data.room,
+      recieverID: data.id,
+    },
+    plain: true,
+  });
+
+  console.log(isanyUnreadMessage);
+  if (isanyUnreadMessage === null) {
+    return true;
+  }
+  if (isanyUnreadMessage.roomlist.dataValues.unreadCount === 0) {
+    return true;
+  } else {
+    const revokeTheMessage = await Messages.findAll({
+      where: {
+        chatID: data.room,
+      },
+    });
+
+    console.log(revokeTheMessage);
   }
 }
 

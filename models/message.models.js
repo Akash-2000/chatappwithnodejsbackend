@@ -9,17 +9,8 @@ const Messages = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-    },
-    // messages: {
-    //   type: DataTypes.ARRAY(DataTypes.STRING),
-    //   allowNull: true, // Set to false if you want the array to be required
-    //   defaultValue: [],
-    // },
     Messages: {
-      type: DataTypes.ARRAY(DataTypes.JSONB),
+      type: DataTypes.ARRAY(DataTypes.JSON),
       defaultValue: [],
     },
   },
