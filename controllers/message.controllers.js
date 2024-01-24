@@ -7,7 +7,7 @@ exports.getMessages = async (req, res) => {
     console.log("my id of the id", id);
     const MessagesofTheuser = await Roomlist.findAll({
       where: {
-        recieverID: id,
+        senderid: id,
       },
     });
     // const MessagesofTheuser = await Roomlist.findAll({

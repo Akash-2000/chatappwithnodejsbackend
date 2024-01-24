@@ -76,7 +76,7 @@ io.on("connection", (socket) => {
       );
     }
     console.log("before active user", name, room);
-    // revokeTheUnreadMessage(data);
+    revokeTheUnreadMessage(data);
     const user = await activateUser(id, name, room);
     console.log("activate", user);
     // try {
@@ -217,20 +217,22 @@ io.on("connection", (socket) => {
         });
         await addDataToRoomlist({
           chatID: room,
-          senderid: id,
-          recieverID: reciever,
+          senderid: reciever,
+          recieverID: id,
           Roomname: sendeRoomname,
           latestmessage: text,
-          role: "sender",
+          role: "reciver",
         });
 
         await addDataToRoomlist({
           chatID: room,
-          senderid: reciever,
-          recieverID: id,
+          senderid: id,
+          recieverID: reciever,
+
           Roomname: recieverRoomname,
           latestmessage: text,
-          role: "reciver",
+
+          role: "sender",
         });
 
         console.log("message send to the reciever");
@@ -806,23 +808,61 @@ async function revokeTheUnreadMessage(data) {
       chatID: data.room,
       recieverID: data.id,
     },
-    plain: true,
   });
 
-  console.log(isanyUnreadMessage);
+  console.log("the message", isanyUnreadMessage);
   if (isanyUnreadMessage === null) {
     return true;
   }
-  if (isanyUnreadMessage.roomlist.dataValues.unreadCount === 0) {
+  console.log(isanyUnreadMessage.dataValues);
+  if (isanyUnreadMessage.dataValues.unreadCount === 0) {
     return true;
   } else {
-    const revokeTheMessage = await Messages.findAll({
-      where: {
-        chatID: data.room,
-      },
-    });
+    //get all the messages
+    try {
+      const revokeTheMessage = await Messages.findAll({
+        where: {
+          chatID: data.room,
+        },
+        plain: true,
+      });
 
-    console.log(revokeTheMessage);
+      //change the unreadMessage to read
+      console.log("revoked", revokeTheMessage);
+      const alterMessage = revokeTheMessage.dataValues.Messages.flat().map(
+        (e) => ({
+          ...e,
+          read: true,
+        })
+      );
+
+      console.log(alterMessage.filter((e) => e.read == false));
+      console.log("NewData", alterMessage);
+
+      const nestedArray = Array.from(
+        { length: alterMessage.length / 1 },
+        (_, index) => alterMessage.slice(index * 1, (index + 1) * 1)
+      );
+
+      console.log(nestedArray);
+
+      //update the new message
+      const updateTheMessage = await Messages.update(
+        {
+          Messages: nestedArray,
+        },
+        {
+          where: {
+            chatID: data.room,
+          },
+        }
+      );
+
+      console.log("this is", updateTheMessage);
+      //Remove all the unRead Message
+    } catch (error) {}
+
+    console.log("updateMessage", updateTheMessage);
   }
 }
 
