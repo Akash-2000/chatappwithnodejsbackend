@@ -76,7 +76,7 @@ io.on("connection", (socket) => {
       );
     }
     console.log("before active user", name, room);
-    revokeTheUnreadMessage(data);
+    await revokeTheUnreadMessage(data);
     const user = await activateUser(id, name, room);
     console.log("activate", user);
     // try {
@@ -93,7 +93,13 @@ io.on("connection", (socket) => {
     // }
     // join Room
     console.log("user of the user", user);
+    const MessagesofTheuser = await Roomlist.findAll({
+      where: {
+        senderid: user._id,
+      },
+    });
 
+    io.to(user.socketId).emit("updateRoomlist", MessagesofTheuser);
     socket.join(user.room);
     userSocketMap[user._id] = { socket_id: socket.id, room: user.room };
 
@@ -329,7 +335,15 @@ io.on("connection", (socket) => {
       console.log(error);
     }
   });
-
+  socket.on("updateRoomlist", async (data) => {
+    console.log(data);
+    //  const MessagesofTheuser = await Roomlist.findAll({
+    //   where: {
+    //     senderid: id,
+    //   },
+    // });
+    console.log("Room list data update");
+  });
   socket.on("leaveRoom", async (data) => {
     console.log(data);
     const { id, room } = data;
@@ -806,7 +820,7 @@ async function revokeTheUnreadMessage(data) {
   const isanyUnreadMessage = await RoomList.findOne({
     where: {
       chatID: data.room,
-      recieverID: data.id,
+      senderid: data.id,
     },
   });
 
@@ -859,10 +873,22 @@ async function revokeTheUnreadMessage(data) {
       );
 
       console.log("this is", updateTheMessage);
-      //Remove all the unRead Message
-    } catch (error) {}
+      const isanyUnreadMessage = await RoomList.update(
+        {
+          unreadCount: 0,
+        },
+        {
+          where: {
+            chatID: data.room,
+            senderid: data.id,
+          },
+        }
+      );
 
-    console.log("updateMessage", updateTheMessage);
+      //Remove all the unRead Message
+    } catch (error) {
+      console.warn(error);
+    }
   }
 }
 
